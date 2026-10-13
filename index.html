@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f2eb">
+  <title>聚餐分帳器</title>
+  <style>
+    :root { color-scheme: light; --ink:#183a35; --muted:#61726d; --green:#176b55; --paper:#fffefa; --line:#e4e8df; }
+    * { box-sizing:border-box }
+    body { margin:0; min-height:100vh; padding:32px 16px; background:#f5f2eb; color:#203a35; font-family:system-ui,-apple-system,"Segoe UI","Noto Sans TC",sans-serif; }
+    main { width:min(100%,560px); margin:0 auto; }
+    .eyebrow { color:var(--green); font-size:.85rem; font-weight:700; letter-spacing:.12em; }
+    h1 { margin:.3rem 0 .5rem; font-size:clamp(2rem,8vw,2.8rem); letter-spacing:.02em; }
+    .intro { margin:0 0 24px; color:var(--muted); line-height:1.7; }
+    .card { padding:clamp(20px,6vw,32px); background:var(--paper); border:1px solid var(--line); border-radius:24px; box-shadow:0 12px 38px #24463b0d; }
+    label, legend { display:block; margin-bottom:8px; font-weight:700; }
+    input[type=number] { width:100%; min-height:54px; padding:10px 14px; border:1px solid #cbd6ce; border-radius:12px; background:#fff; color:var(--ink); font:inherit; font-size:1.15rem; }
+    input:focus-visible, button:focus-visible { outline:3px solid #81c8aa; outline-offset:2px; }
+    .field { margin-bottom:21px; }
+    .hint { margin:6px 0 0; color:var(--muted); font-size:.86rem; }
+    fieldset { margin:0 0 23px; padding:0; border:0; }
+    .choice { display:flex; align-items:center; gap:10px; min-height:48px; padding:10px 13px; border:1px solid var(--line); border-radius:12px; cursor:pointer; }
+    .choice + .choice { margin-top:9px; }
+    .choice input { width:19px; height:19px; accent-color:var(--green); }
+    button { width:100%; min-height:54px; border:0; border-radius:13px; background:var(--green); color:white; font:inherit; font-size:1.05rem; font-weight:750; cursor:pointer; }
+    button:hover { background:#105541; }
+    #error { min-height:1.35em; margin:12px 0 0; color:#a23d2d; font-weight:600; }
+    #result { display:none; margin-top:20px; padding:22px; border-radius:18px; background:#eaf4ed; }
+    #result.show { display:block; }
+    .total { margin:0; color:var(--muted); }
+    .total strong { color:var(--ink); font-size:1.2rem; }
+    .split { display:grid; grid-template-columns:1fr auto; gap:10px 18px; margin:19px 0 0; }
+    .split dt { color:var(--muted); }
+    .split dd { margin:0; font-size:1.2rem; font-weight:800; text-align:right; }
+    .tag { display:inline-block; margin-left:5px; padding:2px 7px; border-radius:99px; background:#d3e8d9; color:#20533b; font-size:.72rem; vertical-align:middle; }
+    .note { margin:16px 0 0; padding-top:14px; border-top:1px solid #cbded0; color:#405d50; font-size:.9rem; line-height:1.65; }
+    footer { margin:18px 4px 0; color:var(--muted); font-size:.8rem; text-align:center; }
+    @media (max-width:420px) { body { padding:22px 12px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="eyebrow">簡單、清楚、剛剛好</div>
+    <h1>聚餐分帳器</h1>
+    <p class="intro">輸入帳單金額和人數，快速算出每個人該分攤多少。</p>
+    <section class="card" aria-label="分帳設定">
+      <form id="split-form" novalidate>
+        <div class="field">
+          <label for="amount">總金額（元）</label>
+          <input id="amount" name="amount" type="number" min="1" step="1" inputmode="numeric" placeholder="例如：1000" required>
+        </div>
+        <div class="field">
+          <label for="people">用餐人數</label>
+          <input id="people" name="people" type="number" min="1" step="1" inputmode="numeric" placeholder="例如：3" required>
+          <p class="hint">包含負責付錢的人。</p>
+        </div>
+        <fieldset>
+          <legend>服務費</legend>
+          <label class="choice"><input type="radio" name="service" value="no" checked> 不加服務費</label>
+          <label class="choice"><input type="radio" name="service" value="yes"> 加 10% 服務費</label>
+        </fieldset>
+        <button type="submit">計算每人金額</button>
+        <p id="error" role="alert" aria-live="polite"></p>
+      </form>
+      <section id="result" aria-live="polite" aria-atomic="true">
+        <p class="total" id="total-line"></p>
+        <dl class="split" id="split-lines"></dl>
+        <p class="note" id="note"></p>
+      </section>
+    </section>
+    <footer>金額只在此頁面即時計算，不會儲存或傳送。</footer>
+  </main>
+  <script>
+    const form = document.querySelector('#split-form');
+    const result = document.querySelector('#result');
+    const error = document.querySelector('#error');
+    const fmt = new Intl.NumberFormat('zh-TW');
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      error.textContent = '';
+      const rawAmount = Number(document.querySelector('#amount').value);
+      const people = Number(document.querySelector('#people').value);
+      if (!Number.isSafeInteger(rawAmount) || rawAmount < 1) {
+        result.classList.remove('show'); error.textContent = '請輸入大於 0 的整數金額。'; return;
+      }
+      if (!Number.isSafeInteger(people) || people < 1 || people > 10000) {
+        result.classList.remove('show'); error.textContent = '請輸入 1 到 10,000 之間的整數人數。'; return;
+      }
+      const withService = form.elements.service.value === 'yes';
+      // 以元為單位四捨五入服務費後的應付總額，確保每人都是整數且總和一致。
+      const total = withService ? Math.floor(rawAmount * 1.1 + 0.5) : rawAmount;
+      if (!Number.isSafeInteger(total)) {
+        result.classList.remove('show'); error.textContent = '金額太大，請輸入較小的數字。'; return;
+      }
+      const each = Math.floor(total / people);
+      const remainder = total - each * people;
+      const payerShare = each + remainder;
+      document.querySelector('#total-line').innerHTML = `應付總額 <strong>${fmt.format(total)} 元</strong>${withService ? '（含 10% 服務費）' : ''}`;
+      const rows = [`<dt>付錢的人</dt><dd>${fmt.format(payerShare)} 元${remainder ? '<span class="tag">含零頭</span>' : ''}</dd>`];
+      if (people > 1) rows.push(`<dt>其他 ${fmt.format(people - 1)} 人（每人）</dt><dd>${fmt.format(each)} 元</dd>`);
+      document.querySelector('#split-lines').innerHTML = rows.join('');
+      document.querySelector('#note').textContent = remainder
+        ? `除不盡的 ${fmt.format(remainder)} 元零頭由付錢的人多分攤，大家合計正好 ${fmt.format(total)} 元。`
+        : `金額剛好平均分配，大家合計正好 ${fmt.format(total)} 元。`;
+      result.classList.add('show');
+    });
+  </script>
+</body>
+</html>
+
